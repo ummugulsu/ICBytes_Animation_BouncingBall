@@ -1,21 +1,24 @@
 ﻿#include "icb_gui.h"
 
 
-ICBYTES image ;
+ICBYTES imageBall ;
+ICBYTES imageStairs;
+ICBYTES image;
+
 int FRM;
 
 // Animation variables
-int ballX;
-int ballY;
+int ballX=280;
+int ballY=20;
 int radius = 15;
-int velocityY = 0;
+double velocityY = 0;
 bool isBouncing = true;
 int stepHeight = 60; // Height of each step
-float gravity = 9.81; // Gravity force to apply
-float bounce_factor = 0.7;
+double gravity = 9.81; // Gravity force to apply
+double bounce_factor = 0.7;
 int currentStep = 0; // To track which step the ball is on
 // Ball position limits for each step
-int stepPositionsY[3] = { 220, 260, 300 }; // Y positions of the tops of the steps
+int stepPositionsY[3] = { 223, 244, 292 }; // Y positions of the tops of the steps
 
 
 void ICGUI_Create() {
@@ -57,7 +60,10 @@ void Draw3DStairs(ICBYTES* image) {
     Line(*image, 340, 320, 500, 320, 0x000000);
     Line(*image, 340, 320, 340, 360, 0x000000);
 
+
     DisplayImage(FRM, *image);
+
+   
     
 }
 
@@ -78,9 +84,10 @@ void Draw3DBall(ICBYTES* image) {
     // Görüntüyü güncelle
     DisplayImage(FRM, *image);
 
+
 }
 
-ICBYTES hole = { {400,380,440,400},{400,380,480,380},{480,380,520,400},{440,400,520,400} };
+ICBYTES hole = { {380,400,500,550},{380,400,530,400},{530,400,700,600} };
 
 
 void DrawHole(ICBYTES* image) {
@@ -93,46 +100,112 @@ void DrawHole(ICBYTES* image) {
 }
 
 
-void UpdateBallPosition() {
-    // Apply gravity
-    velocityY += gravity;
 
-    // Update ball's vertical position
-    ballY += (int)velocityY;
+// Define the coordinates for the rectangular hole
+int holeX1 = 380; // Left X coordinate
+int holeX2 = 700; // Right X coordinate
+int holeY1 = 400; // Top Y coordinate
+int holeY2 = 550; // Bottom Y coordinate 
 
-    // Handle ball bouncing on each step
-    if (ballY >= stepPositionsY[currentStep] - radius) {
-        ballY = stepPositionsY[currentStep] - radius; // Ball hits the step
+static void UpdateBallPosition() {
 
+
+ 
+
+    // Check for bouncing on steps
+    if (currentStep < 3 && ballY >= stepPositionsY[currentStep] ) {
+        ballY = stepPositionsY[currentStep] ; // Ball hits the step
+   
         // Bounce the ball
-        if (velocityY > 0) { // If the ball is falling downwards
-            velocityY = -velocityY * bounce_factor; // Reverse velocity and apply bounce factor
+        if (velocityY > 0) { // Only bounce if falling down
+            velocityY = - velocityY * bounce_factor; // Reverse and reduce velocity
+
+                
+           
         }
 
-        // Check if ball should drop to next step
-        if (velocityY > -2.0f) { // Minimal velocity threshold to stop bouncing
+        // Move to the next step if the bounce is small
+        if (velocityY < -2.0f) { // Minimal velocity threshold to stop bouncing
             currentStep++;
-            if (currentStep > 2) { // Ball has fallen beyond the last step
-                isBouncing = false; // End bouncing
+            if (currentStep > 3) { // Check if on the last step
+                isBouncing = false; // Stop bouncing if beyond last step
             }
         }
+       
+       
     }
+  
+      
+    else {
+        // If the ball is near the hole, initiate rolling into the hole
+        if (ballX >= holeX1 && ballX <= holeX2 && ballY >= holeY1) {
+            // Move the ball into the hole
+            if (ballY < holeY2) {
+                // Move downwards to simulate rolling into the hole
+                ballY += 10; // Adjust this value for speed of rolling into the hole
+                ballX += 7;
+            }
+            else {
+                // Reset when fully in the hole
+                ballX = (holeX1 + holeX2) / 2; // Center of the hole
+                ballY = holeY2; // Bottom of the hole
+                isBouncing = false; // Stop bouncing as it is in the hole
+                currentStep = 0; // Reset the current step for the next loop
+            }
+        }
+        else { // Apply gravity if not rolling into the hole
+            velocityY += gravity; // Simulate gravity over a small time step
+            if (currentStep > 0) {
+                ballX += 10; // Move right if on the second or third step
+            }
+            // Update ball's vertical position
+            ballY += (int)velocityY;
+        }
+    }
+
+
+ 
+    
+}
+
+bool isRunning = true;
+DWORD WINAPI AnimationThread(LPVOID lpParam) {
+
+    while (isRunning) {
+        while (isBouncing) {
+            FillRect(image, 5, 5, 755, 535, 0x000000);
+            Draw3DStairs(&image);
+            DrawHole(&image);
+
+            Draw3DBall(&image);
+            UpdateBallPosition();
+            Sleep(100); // Animation speed control
+        }
+        if (!isBouncing) {
+            ballX = 280;
+            ballY = 20;
+            velocityY = 0;
+            currentStep = 0;
+            isBouncing = true; // Restart the bouncing loop
+        }
+    }
+    return 0;
 }
 
 void ICGUI_main() {
-    FRM = ICG_FrameMedium(5, 5, 755, 535); //755*535 pixel frame
-    CreateImage(image, 755, 535, ICB_UINT); //  755*535*32 bit pxel image matrix
+    FRM = ICG_FrameMedium(5, 5, 755, 535); // Frame
+    CreateImage(image, 755, 535, ICB_UINT); // Image matrix
 
+    Draw3DStairs(&image);
+    DrawHole(&image);
 
-    // Initialize ball position
-    ballX = 320; // Top center of first step
-    ballY = 20; // Start above the first step
-
-    while (isBouncing) {
-        Draw3DStairs(&image);
-        DrawHole(&image);
-        UpdateBallPosition(); // Update the ball's position each frame
-        Draw3DBall(&image); // Draw ball after updating position
+    // Start the animation in a separate thread
+    DWORD threadId;
+    HANDLE hThread = CreateThread(NULL, 0, AnimationThread, NULL, 0, &threadId);
+    if (hThread == NULL) {
+        MessageBox(NULL, "Failed to create thread", "Error", MB_OK);
+        return;
     }
-   
+    // Close the thread handle (optional, depends on cleanup requirements)
+    CloseHandle(hThread);
 }
