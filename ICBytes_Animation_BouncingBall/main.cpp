@@ -87,14 +87,23 @@ void Draw3DBall(ICBYTES* image) {
 
 }
 
-ICBYTES hole = { {380,400,500,550},{380,400,530,400},{530,400,700,600} };
+ICBYTES hole = { {380,400,500,550},{380,400,530,400},{530,400,710,600} };
 
 
 void DrawHole(ICBYTES* image) {
     // Draw the hole with a darker color to simulate depth
     Line(*image,hole , 0x555555);
 
+    int i;
+    int x1=430, x2=590, y1=400, y2=600;
+    for (i=0;i<70;i++)
+    {
 
+        Line(*image, x1,y1,x2,y2, 0x555555);
+        x1 += 1;
+        x2 += 1;
+
+    }
     // Görüntüyü güncelle
     DisplayImage(FRM, *image);
 }
